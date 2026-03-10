@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { parseCourses } from "./parser"
-import { filterCourses, calcCredits } from "./req_sum"
-import { REQ_GYOYANG_PIL, REQ_DRAGONBALL, checkRequirements } from "./req_all"
-import { REQ_CS, CS_MAJOR_IDS } from "./req_computer"
-import { REQ_BUSINESS, BUSINESS_MAJOR_IDS } from "./req_business"
-import { REQ_VD, VD_MAJOR_IDS } from "./req_visualDesign"
+import { filterCourses, calcCredits } from "./creditSum"
+import { REQ_GYOYANG_PIL, REQ_DRAGONBALL, checkRequirements } from "./requirements"
+import { REQ_CS, CS_MAJOR_IDS } from "./majors/computerScience"
+import { REQ_BUSINESS, BUSINESS_MAJOR_IDS } from "./majors/business"
+import { REQ_VD, VD_MAJOR_IDS } from "./majors/visualDesign"
 import "./App.css"
 
 const STEPS = ["클래스넷", "전체성적조회", "Ctrl+A", "복사", "아래에 붙여넣기", "졸업요건확인 버튼"]
