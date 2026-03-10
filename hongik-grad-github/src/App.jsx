@@ -1,36 +1,48 @@
 import { useState } from "react"
-import { parseCourseIds } from "./parser"
-import { checkRequirements } from "./requirements"
-import COURSE_CREDITS from "./courseCredits"
+import { parseCourses } from "./parser"
+import { filterCourses, calcCredits } from "./req_sum"
+import { REQ_GYOYANG_PIL, REQ_DRAGONBALL, checkRequirements } from "./req_all"
+import { REQ_CS, CS_MAJOR_IDS } from "./req_computer"
+import { REQ_BUSINESS, BUSINESS_MAJOR_IDS } from "./req_business"
+import { REQ_VD, VD_MAJOR_IDS } from "./req_visualDesign"
 import "./App.css"
 
 const STEPS = ["클래스넷", "전체성적조회", "Ctrl+A", "복사", "아래에 붙여넣기", "졸업요건확인 버튼"]
+
+const MAJOR_CONFIG = {
+  cs:       { req: REQ_CS,       majorIds: CS_MAJOR_IDS },
+  business: { req: REQ_BUSINESS, majorIds: BUSINESS_MAJOR_IDS },
+  design:   { req: REQ_VD,       majorIds: VD_MAJOR_IDS },
+}
 
 /* ────────────────────────────────────────────
    입력 페이지
 ──────────────────────────────────────────── */
 function InputPage({ onSubmit }) {
   const [text, setText] = useState("")
+  const [major, setMajor] = useState("")
   const [error, setError] = useState("")
 
   function handleCheck() {
+    if (!major) {
+      setError("전공을 선택해 주세요.")
+      return
+    }
     if (!text.trim()) {
       setError("성적 내용을 붙여넣어 주세요.")
       return
     }
-    const ids = parseCourseIds(text)
+    const ids = filterCourses(parseCourses(text))
     if (ids.length === 0) {
       setError("과목을 찾을 수 없습니다. 전체성적조회 화면을 복사했는지 확인해 주세요.")
       return
     }
     setError("")
-    const getCredits = (id) => ({ credits: 3, isMajor: false, ...COURSE_CREDITS[id] })
-    const totalCredits = ids.reduce((sum, id) => sum + getCredits(id).credits, 0)
-    const majorCredits = ids.reduce((sum, id) => {
-      const c = getCredits(id)
-      return sum + (c.isMajor ? c.credits : 0)
-    }, 0)
-    onSubmit({ results: checkRequirements(ids), totalCredits, majorCredits })
+    const takenSet = new Set(ids)
+    const { req: majorReq, majorIds } = MAJOR_CONFIG[major]
+    const { totalCredits, majorCredits } = calcCredits(takenSet, majorIds)
+    const results = checkRequirements(takenSet, [REQ_GYOYANG_PIL, majorReq, REQ_DRAGONBALL])
+    onSubmit({ results, totalCredits, majorCredits })
   }
 
   return (
@@ -61,9 +73,11 @@ function InputPage({ onSubmit }) {
         <div className="textbox-wrapper">
           <div className="textbox-label">
             <span>전체성적 붙여넣기</span>
-            <select className="major-select" defaultValue="">
+            <select className="major-select" value={major} onChange={(e) => { setMajor(e.target.value); setError("") }}>
               <option value="" disabled>전공</option>
               <option value="cs">컴퓨터공학과</option>
+              <option value="design">시각디자인학과</option>
+              <option value="business">경영학부</option>
             </select>
           </div>
           <textarea
@@ -133,46 +147,44 @@ function ResultPage({ results, totalCredits, majorCredits, onBack }) {
         </div>
 
         {/* 카테고리별 결과 */}
-        {results.map((result) =>
-          result.type === "each"
-            ? <EachCard key={result.category + result.label} result={result} results={results} />
-            : <NOfCard key={result.category} result={result} />
-        )}
+        {Object.entries(
+          results.reduce((acc, r) => {
+            if (r.type === "each") (acc[r.category] ??= []).push(r)
+            return acc
+          }, {})
+        ).map(([category, items]) => (
+          <EachCard key={category} category={category} items={items} />
+        ))}
+        {results.filter((r) => r.type === "nOf").map((result) => (
+          <NOfCard key={result.category} result={result} />
+        ))}
       </main>
     </>
   )
 }
 
-// "each" 타입 — 카테고리 단위로 묶어서 렌더링
-function EachCard({ result, results }) {
-  // 같은 카테고리의 첫 번째 항목일 때만 카드 헤더 렌더링
-  const sameCategory = results.filter((r) => r.type === "each" && r.category === result.category)
-  const isFirst = sameCategory[0].label === result.label
-  const catMet = sameCategory.filter((r) => r.met).length
-
+// "each" 타입 — 카테고리 단위 카드
+function EachCard({ category, items }) {
+  const catMet = items.filter((r) => r.met).length
   return (
-    <>
-      {isFirst && (
-        <div className="req-card">
-          <div className="req-card-header">
-            <span>{result.category}</span>
-            <span className={`cat-badge ${catMet === sameCategory.length ? "all-met" : ""}`}>
-              {catMet} / {sameCategory.length}
-            </span>
-          </div>
-          {sameCategory.map((item) => (
-            <div key={item.label} className={`req-row ${item.met ? "met" : "unmet"}`}>
-              <span className="req-icon">{item.met ? "✓" : "✗"}</span>
-              <span className="req-name">{item.label}</span>
-              {item.met
-                ? <span className="req-chip met-chip">{item.matchedId} 이수완료</span>
-                : <span className="req-chip unmet-chip">미이수</span>
-              }
-            </div>
-          ))}
+    <div className="req-card">
+      <div className="req-card-header">
+        <span>{category}</span>
+        <span className={`cat-badge ${catMet === items.length ? "all-met" : ""}`}>
+          {catMet} / {items.length}
+        </span>
+      </div>
+      {items.map((item) => (
+        <div key={item.label} className={`req-row ${item.met ? "met" : "unmet"}`}>
+          <span className="req-icon">{item.met ? "✓" : "✗"}</span>
+          <span className="req-name">{item.label}</span>
+          {item.met
+            ? <span className="req-chip met-chip">{item.showName ? `${item.matchedName} ` : ""}이수완료</span>
+            : <span className="req-chip unmet-chip">미이수</span>
+          }
         </div>
-      )}
-    </>
+      ))}
+    </div>
   )
 }
 
